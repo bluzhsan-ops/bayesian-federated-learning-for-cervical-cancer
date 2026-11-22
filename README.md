@@ -71,7 +71,7 @@ hovernet_fast-pannuke.pth: pre-trained segmentation weights
 
 ---
 
-École Polytechnique de Tunisie (EPT) · ESPRIT
+École Polytechnique de Tunisie (EPT) · ENETCOM 
 
 ---
 
