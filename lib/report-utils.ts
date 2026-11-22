@@ -1,0 +1,92 @@
+import { CellReviewMap, RegionOfInterest, SampleType, StainingMethod, effectiveClass, personName } from '@/lib/analysis-types';
+
+export interface PatientInfo {
+  patientRecordId: string;
+  patientFirstName: string;
+  patientLastName: string;
+  patientId: string;
+  dateOfBirth: string;
+  /** Fixed: cervical cytology screening is female-only anatomy. */
+  sex: 'female';
+  sampleId: string;
+  slideId: string;
+  sampleType: SampleType | '';
+  /** Fixed. */
+  anatomicalSite: 'cervix';
+  stainingMethod: StainingMethod | '';
+  imageStudyId: string;
+  notes: string;
+}
+
+export const EMPTY_PATIENT: PatientInfo = {
+  patientRecordId: '',
+  patientFirstName: '',
+  patientLastName: '',
+  patientId: '',
+  dateOfBirth: '',
+  sex: 'female',
+  sampleId: '',
+  slideId: '',
+  sampleType: '',
+  anatomicalSite: 'cervix',
+  stainingMethod: '',
+  imageStudyId: '',
+  notes: '',
+};
+
+/** Fields a report cannot be saved without — mirrored server-side. */
+export const REQUIRED_PATIENT_FIELDS: Array<{ key: keyof PatientInfo; label: string }> = [
+  { key: 'patientFirstName', label: 'Patient first name' },
+  { key: 'patientLastName', label: 'Patient last name' },
+  { key: 'patientId', label: 'Patient ID' },
+  { key: 'dateOfBirth', label: 'Date of birth' },
+];
+
+export function patientDisplayName(patient: Pick<PatientInfo, 'patientFirstName' | 'patientLastName'>): string {
+  return personName({ firstName: patient.patientFirstName, lastName: patient.patientLastName }, 'Unnamed patient');
+}
+
+export function missingPatientFields(patient: PatientInfo): Array<keyof PatientInfo> {
+  return REQUIRED_PATIENT_FIELDS.filter(({ key }) => !patient[key]?.trim()).map(({ key }) => key);
+}
+
+function hashString(value: string, multiplier: number): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * multiplier + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+/** Stable, non-identifying study reference derived from the sample identifiers. */
+export function studyReference(patient: PatientInfo, analyzedAt?: string): string {
+  const date = (analyzedAt ?? new Date().toISOString()).slice(0, 10).replace(/-/g, '');
+  const seed = patient.patientId || patientDisplayName(patient) || 'ANON';
+  return `CT-${date}-${hashString(seed, 31).toString(36).toUpperCase().padStart(5, '0').slice(0, 5)}`;
+}
+
+export function pseudonymise(value: string): string {
+  if (!value) return '—';
+  return `PSEU-${hashString(value, 33).toString(16).toUpperCase().padStart(8, '0').slice(0, 8)}`;
+}
+
+export function ageFrom(dateOfBirth: string): string {
+  if (!dateOfBirth) return '—';
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return '—';
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const monthDelta = now.getMonth() - dob.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < dob.getDate())) age -= 1;
+  return `${age} years`;
+}
+
+/** Per-class counts once the practitioner's corrections are applied. */
+export function reviewedDistribution(regions: RegionOfInterest[], reviews: CellReviewMap): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const roi of regions) {
+    const name = effectiveClass(roi, reviews[String(roi.id)]).toUpperCase();
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  return counts;
+}
